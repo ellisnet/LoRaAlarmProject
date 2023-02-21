@@ -51,8 +51,8 @@ namespace NotificationServiceEmulator
             services.AddControllers();
 
             // Add services needed by application
-            //services.AddSingleton<ISimpleHttpClientFactory, SimpleHttpClientFactory>();
-            services.AddSingleton<ISimpleMessaging>(SimpleMessaging.Instance);
+            services
+                .AddSimpleMessaging();
 
             //Added for Swagger
             services.AddEndpointsApiExplorer();

@@ -1,7 +1,8 @@
-﻿//File copied and adapted from here:
+//File copied and adapted from here:
 //  https://github.com/ellisnet/ArduinoBle/blob/feature/TryingWindows/Source/BluetoothLevel.Net/BluetoothLevel.Net/ViewModels/SimpleViewModel.cs
 
-/* Copyright 2022 Ellisnet - Jeremy Ellis (jeremy@ellisnet.com)
+/*
+   Copyright 2023 Ellisnet - Jeremy Ellis (jeremy@ellisnet.com)
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
@@ -13,16 +14,22 @@
    limitations under the License.
 */
 
-//FILE DATE/REVISION: 11/12/2022
+//FILE DATE/REVISION: 02/18/2023
 
+// ReSharper disable RedundantCast
+// ReSharper disable RedundantAssignment
 // ReSharper disable RedundantUsingDirective
 // ReSharper disable RedundantNameQualifier
+// ReSharper disable RedundantEmptySwitchSection
+// ReSharper disable RedundantAttributeUsageProperty
 // ReSharper disable CheckNamespace
 // ReSharper disable ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
 // ReSharper disable ConditionalAccessQualifierIsNonNullableAccordingToAPIContract
 // ReSharper disable NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
 // ReSharper disable UnusedMember.Local
 // ReSharper disable UnusedMember.Global
+// ReSharper disable UnusedMemberInSuper.Global
+// ReSharper disable UnusedParameter.Local
 
 #pragma warning disable IDE0079
 
@@ -58,6 +65,10 @@ using Microsoft.Maui.ApplicationModel;
 using Microsoft.Maui.Controls;
 #else
 using System.Windows;
+#endif
+
+#if SIMPLE_ENUM
+//Requires C# v11.0 (minimum) - i.e. use with .NET 7 and higher
 #endif
 
 #if RESOLVE_SERVICES
@@ -232,7 +243,6 @@ public class SimpleDialog : IDisposable
             throw new ObjectDisposedException("Dialog has been disposed.");
         }
 
-        // ReSharper disable once RedundantAssignment
         var result = SimpleDialogResult.None;
 
 #if (WIN_UI || MAUI)
@@ -338,7 +348,6 @@ public class SimpleDialog : IDisposable
                 result = SimpleDialogResult.No;
                 break;
 
-            // ReSharper disable once RedundantEmptySwitchSection
             default:
                 break;
         }
@@ -384,17 +393,18 @@ public abstract class SimpleViewModel : IXamlRootGetter, INotifyPropertyChanged,
 public abstract class SimpleViewModel : INotifyPropertyChanged, IDisposable
 #endif
 {
-    private static bool? isInDesignMode;
+    // ReSharper disable once InconsistentNaming
+    private static bool? _isInDesignMode;
 
 #if (WIN_UI || MAUI)
     //Don't currently know how to check and see if the view-model instance is in "design mode" -
     //  for WinUI and .NET MAUI.
     protected bool IsDesignMode(bool defaultValueIfNotSet) =>
-        isInDesignMode ?? defaultValueIfNotSet;
+        _isInDesignMode ?? defaultValueIfNotSet;
 #else
     protected bool IsDesignMode(bool? defaultValueIfNotSet = null)
     {
-        if (!isInDesignMode.HasValue)
+        if (!_isInDesignMode.HasValue)
         {
             if (defaultValueIfNotSet.HasValue)
             {
@@ -403,13 +413,13 @@ public abstract class SimpleViewModel : INotifyPropertyChanged, IDisposable
 
             //Checking GetIsInDesignMode() works fine (WPF-only so far) when the application is being designed
             //  in Visual Studio; but does not work correctly when being designed in JetBrains Rider.
-            isInDesignMode = DesignerProperties.GetIsInDesignMode(new DependencyObject());
+            _isInDesignMode = DesignerProperties.GetIsInDesignMode(new DependencyObject());
         }
-        return isInDesignMode.Value;
+        return _isInDesignMode.Value;
     }
 #endif
 
-    public static void SetIsDesignMode(bool isDesignMode) => isInDesignMode = isDesignMode;
+    public static void SetIsDesignMode(bool isDesignMode) => _isInDesignMode = isDesignMode;
 
 #if WIN_UI
     private DispatcherQueue _dispatcher = DispatcherQueue.GetForCurrentThread();
@@ -484,10 +494,76 @@ public abstract class SimpleViewModel : INotifyPropertyChanged, IDisposable
 
 #if RESOLVE_SERVICES
     protected T GetService<T>() where T : class => SimpleServiceResolver.Instance.GetService<T>();
+    protected IEnumerable<T> GetServices<T>() where T : class => SimpleServiceResolver.Instance.GetServices<T>();
 #endif
 
 #if SIMPLE_MESSAGING
-    
+
+#if RESOLVE_SERVICES
+
+    protected void MessagingSend<TSender, TArgs>(TSender sender, string message, TArgs args)
+        where TSender : class =>
+        (GetService<ISimpleMessaging>()).Send(sender, message, args);
+
+    protected void MessagingSend<TSender>(TSender sender, string message)
+        where TSender : class =>
+        (GetService<ISimpleMessaging>()).Send(sender, message);
+
+    protected void MessagingSubscribe<TSender, TArgs>(
+        object subscriber,
+        string message,
+        Action<TSender, TArgs> callback,
+        TSender source)
+        where TSender : class =>
+        (GetService<ISimpleMessaging>()).Subscribe(subscriber, message, callback, source);
+
+    protected void MessagingSubscribeFrom<TSender>(
+        object subscriber,
+        string message,
+        Action<TSender> callback,
+        TSender source) where TSender : class =>
+        (GetService<ISimpleMessaging>()).SubscribeFrom(subscriber, message, callback, source);
+
+    protected void MessagingSubscribe<TArgs>(
+        object subscriber,
+        string message,
+        Action<TArgs> callback) =>
+        (GetService<ISimpleMessaging>()).Subscribe(subscriber, message, callback);
+
+    protected void MessagingSubscribe<TSender, TArgs>(
+        object subscriber,
+        string message,
+        Func<TSender, TArgs, Task> callback,
+        TSender source)
+        where TSender : class =>
+        (GetService<ISimpleMessaging>()).Subscribe(subscriber, message, callback, source);
+
+    protected void MessagingSubscribeFrom<TSender>(
+        object subscriber,
+        string message,
+        Func<TSender, Task> callback,
+        TSender source) where TSender : class =>
+        (GetService<ISimpleMessaging>()).SubscribeFrom(subscriber, message, callback, source);
+
+    protected void MessagingSubscribe<TArgs>(
+        object subscriber,
+        string message,
+        Func<TArgs, Task> callback) =>
+        (GetService<ISimpleMessaging>()).Subscribe(subscriber, message, callback);
+
+    protected void MessagingUnsubscribe<TSender, TArgs>(object subscriber, string message)
+        where TSender : class =>
+        (GetService<ISimpleMessaging>()).Unsubscribe<TSender, TArgs>(subscriber, message);
+
+    protected void MessagingUnsubscribeFrom<TSender>(object subscriber, string message)
+        where TSender : class =>
+        (GetService<ISimpleMessaging>()).UnsubscribeFrom<TSender>(subscriber, message);
+
+    protected void MessagingUnsubscribe<TArgs>(object subscriber, string message) =>
+        (GetService<ISimpleMessaging>()).Unsubscribe<TArgs>(subscriber, message);
+
+#else
+
     protected void MessagingSend<TSender, TArgs>(TSender sender, string message, TArgs args) 
         where TSender : class =>
         SimpleMessaging.Send(sender, message, args);
@@ -516,7 +592,28 @@ public abstract class SimpleViewModel : INotifyPropertyChanged, IDisposable
         string message,
         Action<TArgs> callback) =>
         SimpleMessaging.Subscribe(subscriber, message, callback);
-    
+
+    protected void MessagingSubscribe<TSender, TArgs>(
+        object subscriber,
+        string message,
+        Func<TSender, TArgs, Task> callback,
+        TSender source)
+        where TSender : class =>
+        SimpleMessaging.Subscribe(subscriber, message, callback, source);
+
+    protected void MessagingSubscribeFrom<TSender>(
+        object subscriber,
+        string message,
+        Func<TSender, Task> callback,
+        TSender source) where TSender : class =>
+        SimpleMessaging.SubscribeFrom(subscriber, message, callback, source);
+
+    protected void MessagingSubscribe<TArgs>(
+        object subscriber,
+        string message,
+        Func<TArgs, Task> callback) =>
+        SimpleMessaging.Subscribe(subscriber, message, callback);
+
     protected void MessagingUnsubscribe<TSender, TArgs>(object subscriber, string message) 
         where TSender : class =>
         SimpleMessaging.Unsubscribe<TSender, TArgs>(subscriber, message);
@@ -527,7 +624,9 @@ public abstract class SimpleViewModel : INotifyPropertyChanged, IDisposable
 
     protected void MessagingUnsubscribe<TArgs>(object subscriber, string message) =>
         SimpleMessaging.Unsubscribe<TArgs>(subscriber, message);
-    
+
+#endif
+
 #endif
 
     #region | Dialog helpers |
@@ -903,8 +1002,6 @@ public abstract class SimpleViewModel : INotifyPropertyChanged, IDisposable
     #endregion
 }
 
-// ReSharper disable RedundantAttributeUsageProperty
-
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
 public class AffectsPropertiesAttribute : Attribute
 {
@@ -931,8 +1028,6 @@ public class AffectsCommandsAttribute : Attribute
 
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
 public class AffectsAllCommandsAttribute : Attribute { }
-
-// ReSharper restore RedundantAttributeUsageProperty
 
 public class SimpleCommand : ICommand, IDisposable
 {
@@ -1243,35 +1338,320 @@ public class SimpleCommand : ICommand, IDisposable
 
 #endif
 
+#if SIMPLE_ENUM
+
+public interface ISimpleEnumInfo
+{
+    string Description { get; }
+    Type EnumType { get; }
+}
+
+public abstract class SimpleEnumInfo<TEnum> : ISimpleEnumInfo
+    where TEnum : Enum
+{
+    public TEnum Member { get; }
+
+    protected SimpleEnumInfo(TEnum member)
+    {
+        if (!Enum.IsDefined(typeof(TEnum), member))
+        {
+            throw new ArgumentOutOfRangeException(nameof(member),
+                $"Not a valid member of {typeof(TEnum).Name}");
+        }
+        Member = member;
+    }
+
+    protected static TInfo FindInfo<TInfo>(TEnum member)
+        where TInfo : class, ISimpleEnumInfo =>
+        SimpleEnumHelper.FindMemberInfo<TEnum, TInfo>(member);
+
+    protected static Dictionary<TEnum, TInfo> GetDictionary<TInfo>()
+        where TInfo : class, ISimpleEnumInfo =>
+        SimpleEnumHelper.GetInfoDictionary<TEnum, TInfo>();
+
+    #region | ISimpleEnumInfo implementation |
+
+    public string Description { get; protected set; }
+    public Type EnumType => typeof(TEnum);
+
+    #endregion
+}
+
+public interface ISimpleEnumInfoAttribute
+{
+    Type InfoType { get; }
+    string InfoMemberName { get; }
+}
+
+[AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
+public class SimpleEnumAttribute<TInfo> : Attribute, ISimpleEnumInfoAttribute
+    where TInfo : class, ISimpleEnumInfo
+{
+    public SimpleEnumAttribute(string infoMemberName) =>
+        InfoMemberName = (string.IsNullOrWhiteSpace(infoMemberName))
+            ? null
+            : infoMemberName.Trim();
+
+    #region | ISimpleEnumInfoAttribute implementation |
+
+    public Type InfoType => typeof(TInfo);
+    public string InfoMemberName { get; }
+
+    #endregion
+}
+
+public static class SimpleEnumHelper
+{
+    private static readonly object Locker = new();
+
+    //Item1 = the Enum type
+    private static readonly Dictionary<Type, Dictionary<string, object>> EnumDictionary = new();
+
+    //Item1 = the SimpleEnumInfo type
+    private static readonly Dictionary<Type, Dictionary<string, object>> InfoDictionary = new();
+
+    private static bool CheckDictionaries(Type enumType = null, Type infoType = null)
+    {
+        var dictionariesExist = false;
+
+        if (infoType != null)
+        {
+            if (InfoDictionary.ContainsKey(infoType))
+            {
+                dictionariesExist = true;
+            }
+        }
+        else if (enumType != null)
+        {
+            if (EnumDictionary.ContainsKey(enumType))
+            {
+                dictionariesExist = true;
+            }
+        }
+
+        if (((infoType != null) || (enumType != null)) && (!dictionariesExist))
+        {
+            lock (Locker)
+            {
+                do
+                {
+                    if (infoType != null && InfoDictionary.ContainsKey(infoType)) { break; }
+                    if (enumType != null && EnumDictionary.ContainsKey(enumType)) { break; }
+
+                    var dictionary = new Dictionary<string, object>();
+                    PropertyInfo[] staticProps = null;
+
+                    if (enumType == null)
+                    {
+                        //Need to get at least one instance of infoType
+                        staticProps = infoType
+                            .GetProperties(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                            .Where(w => w.PropertyType == infoType)
+                            .ToArray();
+                        if (staticProps.Length < 1) { break; }
+
+                        foreach (var prop in staticProps)
+                        {
+                            if (prop.GetValue(infoType) is ISimpleEnumInfo info)
+                            {
+                                enumType = info.EnumType;
+                                break;
+                            }
+                        }
+                    }
+                    if (enumType == null) { break; }
+
+                    foreach (var member in Enum.GetValues(enumType))
+                    {
+                        var memberName = member.ToString();
+                        if (memberName != null)
+                        {
+                            object memberInfo = null;
+                            // ReSharper disable once ConstantConditionalAccessQualifier
+                            var attribs = enumType
+                                .GetMember(memberName)
+                                .FirstOrDefault(f => f.DeclaringType == enumType)?
+                                .GetCustomAttributes(true)?
+                                .Where(w => w.GetType().IsAssignableTo(typeof(ISimpleEnumInfoAttribute)))
+                                .Select(s => s as ISimpleEnumInfoAttribute)
+                                .ToArray() ?? Array.Empty<ISimpleEnumInfoAttribute>();
+
+                            if (attribs.Length > 1)
+                            {
+                                throw new TypeLoadException(
+                                    $"The {enumType.Name}.{memberName} enum member cannot have more than one instance of SimpleEnumAttribute assigned to it.");
+                            }
+                            else if (attribs.Length == 1)
+                            {
+                                var attrib = attribs[0];
+                                infoType ??= attrib.InfoType;
+
+                                if (infoType != null && attrib.InfoType != null && infoType == attrib.InfoType)
+                                {
+                                    staticProps ??= infoType
+                                        .GetProperties(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                                        .Where(w => w.PropertyType == infoType)
+                                        .ToArray();
+
+                                    if (!string.IsNullOrWhiteSpace(attrib.InfoMemberName))
+                                    {
+                                        var prop = staticProps.FirstOrDefault(f =>
+                                            f.Name.Equals(attrib.InfoMemberName.Trim(),
+                                                StringComparison.InvariantCultureIgnoreCase));
+                                        if (prop != null)
+                                        {
+                                            if (prop.GetValue(infoType) is ISimpleEnumInfo info)
+                                            {
+                                                memberInfo = info;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            dictionary.Add(memberName, memberInfo);
+                        }
+                    }
+
+                    EnumDictionary.Add(enumType, dictionary);
+                    if (infoType != null)
+                    {
+                        InfoDictionary.Add(infoType, dictionary);
+                    }
+
+                    dictionariesExist = true;
+                } while (false);
+            }
+        }
+
+        return dictionariesExist;
+    }
+
+    public static TInfo FindMemberInfo<TInfo>(string memberName)
+        where TInfo : class, ISimpleEnumInfo
+    {
+        TInfo result = null;
+
+        if (!string.IsNullOrWhiteSpace(memberName))
+        {
+            var infoType = typeof(TInfo);
+
+            if (CheckDictionaries(infoType: infoType) && InfoDictionary.ContainsKey(infoType))
+            {
+                var dictionary = InfoDictionary[infoType];
+                if (dictionary.Any(a => a.Key.Equals(memberName.Trim(),
+                        StringComparison.InvariantCultureIgnoreCase)
+                    && a.Value != null))
+                {
+                    var kvp = dictionary.Single(s => s.Key.Equals(memberName.Trim(),
+                                                                  StringComparison.InvariantCultureIgnoreCase)
+                                                              && s.Value != null);
+                    result = (TInfo)kvp.Value;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public static TInfo FindMemberInfo<TEnum, TInfo>(TEnum member)
+        where TInfo : class, ISimpleEnumInfo
+        where TEnum : Enum
+    {
+        TInfo result = null;
+        var enumType = typeof(TEnum);
+
+        if (Enum.IsDefined(enumType, member))
+        {
+            var infoType = typeof(TInfo);
+
+            if (CheckDictionaries(infoType: infoType) && InfoDictionary.ContainsKey(infoType))
+            {
+                var dictionary = InfoDictionary[infoType];
+                if (dictionary.Any(a => a.Key.Equals(member.ToString(),
+                                            StringComparison.InvariantCultureIgnoreCase)
+                                        && a.Value != null))
+                {
+                    var kvp = dictionary.Single(s => s.Key.Equals(member.ToString(),
+                                                         StringComparison.InvariantCultureIgnoreCase)
+                                                     && s.Value != null);
+                    var info = (TInfo)kvp.Value;
+                    if (((ISimpleEnumInfo)info).EnumType == enumType)
+                    {
+                        result = info;
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public static Dictionary<TEnum, TInfo> GetInfoDictionary<TEnum, TInfo>()
+        where TInfo : class, ISimpleEnumInfo
+        where TEnum : Enum
+    {
+        var result = new Dictionary<TEnum, TInfo>();
+
+        var enumType = typeof(TEnum);
+        var infoType = typeof(TInfo);
+
+        if (CheckDictionaries(enumType: enumType, infoType: typeof(TInfo))
+            && EnumDictionary.ContainsKey(enumType))
+        {
+            var dictionary = EnumDictionary[enumType];
+
+            foreach (var member in Enum.GetValues(enumType).Cast<TEnum>())
+            {
+                if (dictionary.Any(a => a.Key == member.ToString()
+                                        && a.Value.GetType().IsAssignableTo(infoType)))
+                {
+                    var value = (TInfo)dictionary.Single(s => s.Key == member.ToString()
+                                                    && s.Value.GetType().IsAssignableTo(infoType)).Value;
+                    result.Add(member, value);
+                }
+                else
+                {
+                    result.Add(member, null);
+                }
+            }
+        }
+
+        return result;
+    }
+}
+
+#endif
+
 #if RESOLVE_SERVICES
 
 public class SimpleServiceResolver
 {
     private readonly IHost _host;
     
-    private static SimpleServiceResolver instance;
+    // ReSharper disable once InconsistentNaming
+    private static SimpleServiceResolver _instance;
     public static SimpleServiceResolver Instance
     {
         get
         {
-            if (instance == null)
+            if (_instance == null)
             {
                 throw new InvalidOperationException(
                     $"The {nameof(SimpleServiceResolver)}.{nameof(CreateInstance)}() static method must be called at application start.");
             }
 
-            return instance;
+            return _instance;
         }
     }
 
     public static void CreateInstance(Action<IServiceCollection> configureServices, string[] args = null)
     {
-        instance = new SimpleServiceResolver(configureServices, args);
+        _instance = new SimpleServiceResolver(configureServices, args);
     }
 
     public static void CreateInstance(IHost host)
     {
-        instance = new SimpleServiceResolver(host);
+        _instance = new SimpleServiceResolver(host);
     }
     
 #if USING_WEB_HOST
@@ -1285,18 +1665,16 @@ public class SimpleServiceResolver
             : Host.CreateDefaultBuilder(args);
 
         _host = builder
-            // ReSharper disable once UnusedParameter.Local
             .ConfigureServices((context, services) =>
             {
                 configureServices.Invoke(services);
 
+#if SIMPLE_MESSAGING
+                services.AddSimpleMessaging();
+#endif
+
 #if SIMPLE_HTTP_CLIENT
-                if (services.All(a => !typeof(IHttpClientFactory).IsAssignableFrom(a.ServiceType)))
-                {
-                    var factory = new SimpleHttpClientFactory();
-                    services.AddSingleton<IHttpClientFactory>(factory);
-                    services.AddSingleton<ISimpleHttpClientFactory>(factory);
-                }
+                services.AddSimpleHttpFactory();
 #endif
 
             })
@@ -1317,6 +1695,28 @@ public class SimpleServiceResolver
     } 
 
     public T GetService<T>() where T : class => _host.Services.GetRequiredService<T>();
+    public IEnumerable<T> GetServices<T>() where T : class => _host.Services.GetServices<T>();
+}
+
+public static class SimpleServiceExtensions
+{
+
+#if SIMPLE_MESSAGING
+    public static IServiceCollection AddSimpleMessaging(this IServiceCollection services)
+    {
+        SimpleMessaging.ConfigureServices(services);
+        return services;
+    }
+#endif
+
+#if SIMPLE_HTTP_CLIENT
+    public static IServiceCollection AddSimpleHttpFactory(this IServiceCollection services)
+    {
+        SimpleHttpClientFactory.ConfigureServices(services);
+        return services;
+    }
+#endif
+
 }
 
 #if USING_WEB_HOST
@@ -1367,7 +1767,15 @@ public interface ISimpleMessaging
     
     void Subscribe<TArgs>(object subscriber, string message, Action<TArgs> callback);
 
-	void Unsubscribe<TSender, TArgs>(object subscriber, string message) 
+    void Subscribe<TSender, TArgs>(object subscriber, string message, Func<TSender, TArgs, Task> callback, TSender source)
+        where TSender : class;
+
+    void SubscribeFrom<TSender>(object subscriber, string message, Func<TSender, Task> callback, TSender source)
+        where TSender : class;
+
+    void Subscribe<TArgs>(object subscriber, string message, Func<TArgs, Task> callback);
+
+    void Unsubscribe<TSender, TArgs>(object subscriber, string message) 
         where TSender : class;
 
 	void UnsubscribeFrom<TSender>(object subscriber, string message) 
@@ -1380,7 +1788,17 @@ public class SimpleMessaging : ISimpleMessaging
 {
 	public static ISimpleMessaging Instance { get; } = new SimpleMessaging();
 
-	private class Sender : Tuple<string, Type, Type>
+#if RESOLVE_SERVICES
+    public static void ConfigureServices(IServiceCollection services)
+    {
+        if (services?.All(a => !typeof(ISimpleMessaging).IsAssignableFrom(a.ServiceType)) ?? false)
+        {
+            services.AddSingleton(Instance);
+        }
+    }
+#endif
+
+    private class Sender : Tuple<string, Type, Type>
 	{
 		public Sender(string message, Type senderType, Type argType) 
             : base(message, senderType, argType) { }
@@ -1415,40 +1833,109 @@ public class SimpleMessaging : ISimpleMessaging
                                || (DelegateWeakReference?.IsAlive ?? false);
 	}
 
-	private class Subscription : Tuple<WeakReference, MaybeWeakReference, MethodInfo, Filter>
+	private class Subscription : IDisposable //: Tuple<WeakReference, MaybeWeakReference, MethodInfo, Func<object, object, Task>, Filter>, IDisposable
 	{
-		public Subscription(object subscriber, object delegateSource, MethodInfo methodInfo, Filter filter)
-			: base(new WeakReference(subscriber), new MaybeWeakReference(subscriber, delegateSource), methodInfo, filter) { }
+        public Subscription(
+            object subscriber, 
+            object delegateSource, 
+            MethodInfo syncMethod,
+            Func<object, object, Task> asyncMethod, 
+            Filter filter)
+        {
+            Subscriber = new WeakReference(subscriber);
+            DelegateSource = new MaybeWeakReference(subscriber, delegateSource);
+            SyncMethod = syncMethod;
+            AsyncMethod = asyncMethod;
+            Filter = filter;
+        }
+//			: base(new WeakReference(subscriber), new MaybeWeakReference(subscriber, delegateSource), syncMethod, asyncMethod, filter) { }
 
-		public WeakReference Subscriber => Item1;
-		MaybeWeakReference DelegateSource => Item2;
-		MethodInfo MethodInfo => Item3;
-		Filter Filter => Item4;
+		public WeakReference Subscriber { get; }
+		private MaybeWeakReference DelegateSource { get; }
+        private MethodInfo SyncMethod { get; set; }
+        private Func<object, object, Task> AsyncMethod { get; set; }
+        private Filter Filter { get; }
+        private SemaphoreSlim _asyncLocker = new (1, 1);
+        private bool _isDisposed;
 
 		public void InvokeCallback(object sender, object args)
 		{
-			if (sender != null && (!Filter(sender))) { return; }
-            
-			if (MethodInfo.IsStatic)
-			{
-				MethodInfo.Invoke(null, MethodInfo.GetParameters().Length == 1 ? new[] { sender ?? args } : new[] { sender, args });
-				return;
-			}
+            if (_isDisposed) { return; }
 
-			var target = DelegateSource.Target;
+            if (sender != null && (!Filter(sender))) { return; }
 
-			if (target == null) { return; }
+            if (AsyncMethod != null)
+            {
+                //Because of the nature of Subscription Callbacks, we must always invoke async subscription callback functions
+                //  as fire-and-forget - there is no way to actually await them - and any UI thread-affecting code in the
+                //  callback will always need to be run as "InvokeOnMainThread".
+                //  They will NOT be invoked in a thread-safe way - thread-safety must be ensured by the 
 
-			MethodInfo.Invoke(target, MethodInfo.GetParameters().Length == 1 ? new[] { sender ?? args } : new[] { sender, args });
+                // ReSharper disable once AsyncVoidLambda
+                new Task(async () =>
+                {
+                    try
+                    {
+                        if (!_isDisposed)
+                        {
+                            await _asyncLocker.WaitAsync();
+                        }
+
+                        if (!_isDisposed)
+                        {
+                            await AsyncMethod.Invoke(sender, args);
+                        }
+                    }
+                    finally
+                    {
+                        if (!_isDisposed)
+                        {
+                            _asyncLocker.Release();
+                        }
+                    }
+                    
+                }).Start();
+            }
+            else if (SyncMethod != null)
+            {
+                if (SyncMethod.IsStatic)
+                {
+                    SyncMethod.Invoke(null, SyncMethod.GetParameters().Length == 1 ? new[] { sender ?? args } : new[] { sender, args });
+                    return;
+                }
+
+                var target = DelegateSource.Target;
+
+                if (target == null) { return; }
+
+                SyncMethod.Invoke(target, SyncMethod.GetParameters().Length == 1 ? new[] { sender ?? args } : new[] { sender, args });
+            }
 		}
 
 		public bool CanBeRemoved()
 		{
 			return (!Subscriber.IsAlive) || (!DelegateSource.IsAlive);
 		}
-	}
+
+        #region | IDisposable implementation |
+
+        public void Dispose()
+        {
+            if (!_isDisposed)
+            {
+                _isDisposed = true;
+                SyncMethod = null;
+                AsyncMethod = null;
+                _asyncLocker?.Dispose();
+                _asyncLocker = null;
+            }
+        }
+
+        #endregion
+    }
 
 	private readonly Dictionary<Sender, List<Subscription>> _subscriptions = new ();
+    private readonly object _subscriptionLocker = new ();
     
     private void InnerSend(
         string message, 
@@ -1464,21 +1951,24 @@ public class SimpleMessaging : ISimpleMessaging
         var matchingSubscriptions = new List<Tuple<Subscription, bool>>();
         var explicitSubscriptions = new List<Subscription>();
         var genericSubscriptions = new List<Subscription>();
-        
-        // Step 1 - look for subscriptions that explicitly reference this senderType
-        var key = new Sender(message, senderType, argType);
-        if (_subscriptions.ContainsKey(key))
+
+        lock (_subscriptionLocker)
         {
-            explicitSubscriptions = _subscriptions[key];
-            matchingSubscriptions.AddRange(explicitSubscriptions.Select(s => Tuple.Create(s, true)));
-        }
-        
-        //Step 2 - look for subscriptions that reference the generic 'object' senderType
-        key = new Sender(message, typeof(object), argType);
-        if (_subscriptions.ContainsKey(key))
-        {
-            genericSubscriptions = _subscriptions[key];
-            matchingSubscriptions.AddRange(genericSubscriptions.Select(s => Tuple.Create(s, false)));
+            // Step 1 - look for subscriptions that explicitly reference this senderType
+            var key = new Sender(message, senderType, argType);
+            if (_subscriptions.ContainsKey(key))
+            {
+                explicitSubscriptions.AddRange(_subscriptions[key]);
+                matchingSubscriptions.AddRange(explicitSubscriptions.Select(s => Tuple.Create(s, true)));
+            }
+
+            //Step 2 - look for subscriptions that reference the generic 'object' senderType
+            key = new Sender(message, typeof(object), argType);
+            if (_subscriptions.ContainsKey(key))
+            {
+                genericSubscriptions.AddRange(_subscriptions[key]);
+                matchingSubscriptions.AddRange(genericSubscriptions.Select(s => Tuple.Create(s, false)));
+            }
         }
 
 		foreach (var subscription in matchingSubscriptions)
@@ -1498,22 +1988,27 @@ public class SimpleMessaging : ISimpleMessaging
         Type senderType, 
         Type argType, 
         object target, 
-        MethodInfo methodInfo, 
+        MethodInfo syncMethod,
+        Func<object, object, Task> asyncMethod,
         Filter filter)
 	{
 		if (message == null) { throw new ArgumentNullException(nameof(message)); }
         
 		var key = new Sender(message, senderType, argType);
-		var value = new Subscription(subscriber, target, methodInfo, filter);
-		if (_subscriptions.ContainsKey(key))
-		{
-			_subscriptions[key].Add(value);
-		}
-		else
-		{
-			var list = new List<Subscription> { value };
-			_subscriptions[key] = list;
-		}
+		var value = new Subscription(subscriber, target, syncMethod, asyncMethod, filter);
+
+        lock (_subscriptionLocker)
+        {
+            if (_subscriptions.ContainsKey(key))
+            {
+                _subscriptions[key].Add(value);
+            }
+            else
+            {
+                var list = new List<Subscription> { value };
+                _subscriptions[key] = list;
+            }
+        }
 	}
 
 	private void InnerUnsubscribe(
@@ -1526,13 +2021,25 @@ public class SimpleMessaging : ISimpleMessaging
 		if (message == null) { throw new ArgumentNullException(nameof(message)); }
 
 		var key = new Sender(message, senderType, argType);
-		if (!_subscriptions.ContainsKey(key)) { return; }
-		_subscriptions[key].RemoveAll(r => r.CanBeRemoved() || r.Subscriber.Target == subscriber);
-		if (!_subscriptions[key].Any()) { _subscriptions.Remove(key); }
-	}
+        lock (_subscriptionLocker)
+        {
+            if (_subscriptions.ContainsKey(key))
+            {
+                var toRemove = _subscriptions[key].Where(w => w.CanBeRemoved()
+                                                              || w.Subscriber.Target == subscriber).ToArray();
+                Array.ForEach(toRemove, f =>
+                {
+                    f?.Dispose();
+                    _subscriptions[key].Remove(f);
+                });
+                if (!_subscriptions[key].Any()) { _subscriptions.Remove(key); }
+            }
+        }
+    }
 
-    #region Static methods
-    
+    #region Static methods - only want these available in non-ServiceResolver scenarios
+
+#if !RESOLVE_SERVICES
     public static void Send<TSender, TArgs>(TSender sender, string message, TArgs args) 
         where TSender : class =>
         Instance.Send(sender, message, args);
@@ -1561,7 +2068,28 @@ public class SimpleMessaging : ISimpleMessaging
         string message,
         Action<TArgs> callback) =>
         Instance.Subscribe(subscriber, message, callback);
-    
+
+    public static void Subscribe<TSender, TArgs>(
+        object subscriber,
+        string message,
+        Func<TSender, TArgs, Task> callback,
+        TSender source)
+        where TSender : class =>
+        Instance.Subscribe(subscriber, message, callback, source);
+
+    public static void SubscribeFrom<TSender>(
+        object subscriber,
+        string message,
+        Func<TSender, Task> callback,
+        TSender source) where TSender : class =>
+        Instance.SubscribeFrom(subscriber, message, callback, source);
+
+    public static void Subscribe<TArgs>(
+        object subscriber,
+        string message,
+        Func<TArgs, Task> callback) =>
+        Instance.Subscribe(subscriber, message, callback);
+
     public static void Unsubscribe<TSender, TArgs>(object subscriber, string message) 
         where TSender : class =>
         Instance.Unsubscribe<TSender, TArgs>(subscriber, message);
@@ -1572,7 +2100,8 @@ public class SimpleMessaging : ISimpleMessaging
     
     public static void Unsubscribe<TArgs>(object subscriber, string message) =>
         Instance.Unsubscribe<TArgs>(subscriber, message);
-    
+#endif    
+
     #endregion
     
     #region | ISimpleMessaging implementation |
@@ -1599,7 +2128,7 @@ public class SimpleMessaging : ISimpleMessaging
 		if (subscriber == null) { throw new ArgumentNullException(nameof(subscriber)); }
 		if (callback == null) { throw new ArgumentNullException(nameof(callback)); }
 
-		InnerSubscribe(subscriber, message, typeof(TSender), typeof(TArgs), callback.Target, callback.GetMethodInfo(), 
+		InnerSubscribe(subscriber, message, typeof(TSender), typeof(TArgs), callback.Target, callback.GetMethodInfo(), null,
             filter: (sender) =>
         {
             var send = (TSender)sender;
@@ -1617,7 +2146,7 @@ public class SimpleMessaging : ISimpleMessaging
 		if (subscriber == null) { throw new ArgumentNullException(nameof(subscriber)); }
 		if (callback == null) { throw new ArgumentNullException(nameof(callback)); }
 
-		InnerSubscribe(subscriber, message, typeof(TSender), null, callback.Target, callback.GetMethodInfo(), 
+		InnerSubscribe(subscriber, message, typeof(TSender), null, callback.Target, callback.GetMethodInfo(), null,
             filter: (sender) =>
         {
             var send = (TSender)sender;
@@ -1630,11 +2159,96 @@ public class SimpleMessaging : ISimpleMessaging
         if (subscriber == null) { throw new ArgumentNullException(nameof(subscriber)); }
         if (callback == null) { throw new ArgumentNullException(nameof(callback)); }
 
-        InnerSubscribe(subscriber, message, typeof(object), typeof(TArgs), callback.Target, callback.GetMethodInfo(), 
+        InnerSubscribe(subscriber, message, typeof(object), typeof(TArgs), callback.Target, callback.GetMethodInfo(), null,
             filter: _ => true); //filter won't be used, for 'generic' object subscriptions
     }
 
-	void ISimpleMessaging.Unsubscribe<TSender, TArgs>(object subscriber, string message) => 
+    void ISimpleMessaging.Subscribe<TSender, TArgs>(
+        object subscriber,
+        string message,
+        Func<TSender, TArgs, Task> callback,
+        TSender source)
+        where TSender : class
+    {
+        if (subscriber == null) { throw new ArgumentNullException(nameof(subscriber)); }
+        if (callback == null) { throw new ArgumentNullException(nameof(callback)); }
+
+        Task AsyncMethod(object sender, object args)
+        {
+            if (sender != null && sender.GetType().IsAssignableTo(typeof(TSender)))
+            {
+                var typedArgs = (args != null && args.GetType().IsAssignableTo(typeof(TArgs)))
+                    ? (TArgs)args
+                    : default;
+                return callback.Invoke((TSender)sender, typedArgs);
+            }
+
+            return Task.Run(() => { });
+        }
+
+        InnerSubscribe(subscriber, message, typeof(TSender), typeof(TArgs), callback.Target, null, AsyncMethod, 
+            filter: (sender) =>
+            {
+                var send = (TSender)sender;
+                return (source == null || send == source);
+            });
+    }
+
+    void ISimpleMessaging.SubscribeFrom<TSender>(
+        object subscriber,
+        string message,
+        Func<TSender, Task> callback,
+        TSender source)
+        where TSender : class
+    {
+        if (subscriber == null) { throw new ArgumentNullException(nameof(subscriber)); }
+        if (callback == null) { throw new ArgumentNullException(nameof(callback)); }
+
+        Task AsyncMethod(object sender, object args)
+        {
+            var typedSender = (sender != null && sender.GetType().IsAssignableTo(typeof(TSender)))
+                ? (TSender)sender
+                : (args != null && args.GetType().IsAssignableTo(typeof(TSender)))
+                    ? (TSender)args
+                    : null;
+            return (typedSender != null) 
+                ? callback.Invoke(typedSender) 
+                : Task.Run(() => { });
+        }
+
+        InnerSubscribe(subscriber, message, typeof(TSender), null, callback.Target, null, AsyncMethod,
+            filter: (sender) =>
+            {
+                var send = (TSender)sender;
+                return (source == null || send == source);
+            });
+    }
+
+    void ISimpleMessaging.Subscribe<TArgs>(object subscriber, string message, Func<TArgs, Task> callback)
+    {
+        if (subscriber == null) { throw new ArgumentNullException(nameof(subscriber)); }
+        if (callback == null) { throw new ArgumentNullException(nameof(callback)); }
+
+        Task AsyncMethod(object sender, object args)
+        {
+            if (args != null && args.GetType().IsAssignableTo(typeof(TArgs)))
+            {
+                return callback.Invoke((TArgs)args);
+            }
+
+            if (sender != null && sender.GetType().IsAssignableTo(typeof(TArgs)))
+            {
+                return callback.Invoke((TArgs)sender);
+            }
+
+            return Task.Run(() => { });
+        }
+
+        InnerSubscribe(subscriber, message, typeof(object), typeof(TArgs), callback.Target, null, AsyncMethod,
+            filter: _ => true); //filter won't be used, for 'generic' object subscriptions
+    }
+
+    void ISimpleMessaging.Unsubscribe<TSender, TArgs>(object subscriber, string message) => 
 		InnerUnsubscribe(message, typeof(TSender), typeof(TArgs), subscriber);
 
 	void ISimpleMessaging.UnsubscribeFrom<TSender>(object subscriber, string message) => 
@@ -1659,6 +2273,27 @@ public interface ISimpleHttpClientFactory : IHttpClientFactory
 
 public class SimpleHttpClientFactory : ISimpleHttpClientFactory
 {
+
+#if RESOLVE_SERVICES
+    public static void ConfigureServices(IServiceCollection services)
+    {
+        if (services != null)
+        {
+            if (services.All(a => !typeof(IHttpClientFactory).IsAssignableFrom(a.ServiceType)))
+            {
+                var factory = new SimpleHttpClientFactory();
+                services.AddSingleton<IHttpClientFactory>(factory);
+                services.AddSingleton<ISimpleHttpClientFactory>(factory);
+            }
+            else if (services.All(a => !typeof(ISimpleHttpClientFactory).IsAssignableFrom(a.ServiceType)))
+            {
+                var factory = new SimpleHttpClientFactory();
+                services.AddSingleton<ISimpleHttpClientFactory>(factory);
+            }
+        }
+    }
+#endif
+
     private class HttpClientReference
     {
         public int ReferenceCount { get; private set; }
@@ -1788,6 +2423,9 @@ public class SimpleHttpClientFactory : ISimpleHttpClientFactory
 
 public class SimpleHttpClient : HttpClient, IDisposable
 {
+    // ReSharper disable once InconsistentNaming
+    private static readonly string JsonMediaType = "application/json";
+
     private bool _isDisposed;
     private readonly string _clientName;
     private SimpleHttpClientFactory _factory;
@@ -2027,6 +2665,34 @@ public class SimpleHttpClient : HttpClient, IDisposable
             var response = await PostAsync(GetApiPath(api, queryParams), request);
             response.EnsureSuccessStatusCode();
         }
+    }
+
+    public async Task<TResponse> PostJsonWithResponseAsync<TResponse>(string api, string data, object queryParams = null)
+        where TResponse : class
+    {
+        CheckDisposed();
+
+        TResponse result = null;
+
+        if ((!string.IsNullOrWhiteSpace(api)) && data != null)
+        {
+            var timestamp = DateTime.Now;
+            var request = new StringContent(data, Encoding.UTF8, JsonMediaType);
+            if (JsonSaveFolder != null)
+            {
+                await TrySaveRequest((await request.ReadAsStringAsync()), timestamp);
+            }
+            var response = await PostAsync(GetApiPath(api, queryParams), request);
+            response.EnsureSuccessStatusCode();
+            var responseJson = await response.Content.ReadAsStringAsync();
+            await TrySaveResponse(responseJson, timestamp);
+            if (!string.IsNullOrWhiteSpace(responseJson))
+            {
+                result = JsonSerializer.Deserialize<TResponse>(responseJson, JsonOptions);
+            }
+        }
+
+        return result;
     }
 
     #endregion
