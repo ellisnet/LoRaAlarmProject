@@ -10,9 +10,9 @@ namespace NotificationServiceEmulator.Controllers
     public class SendNotificationController : Controller
     {
         private readonly ISimpleMessaging _messaging;
-        public SendNotificationController(ISimpleMessaging nessaging)
+        public SendNotificationController(ISimpleMessaging messaging)
         {
-            _messaging = nessaging ?? throw new ArgumentNullException(nameof(nessaging));
+            _messaging = messaging ?? throw new ArgumentNullException(nameof(messaging));
         }
 
         [HttpGet("send")]
