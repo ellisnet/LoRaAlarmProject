@@ -1,4 +1,7 @@
-﻿namespace TestNotifier
+﻿using System;
+using System.Threading.Tasks;
+
+namespace TestNotifier
 {
     internal class Program
     {

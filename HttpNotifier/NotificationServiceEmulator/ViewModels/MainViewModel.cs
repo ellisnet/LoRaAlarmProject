@@ -10,8 +10,8 @@ namespace NotificationServiceEmulator.ViewModels
     {
         #region Bindable properties
 
-        private string? _messageLog = string.Empty;
-        public string? MessageLog
+        private string _messageLog = string.Empty;
+        public string MessageLog
         {
             get => _messageLog;
             set => SetProperty(ref _messageLog, (value ?? string.Empty));

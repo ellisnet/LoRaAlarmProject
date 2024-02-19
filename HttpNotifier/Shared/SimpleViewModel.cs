@@ -2,7 +2,7 @@
 //  https://github.com/ellisnet/ArduinoBle/blob/feature/TryingWindows/Source/BluetoothLevel.Net/BluetoothLevel.Net/ViewModels/SimpleViewModel.cs
 
 /*
-   Copyright 2023 Ellisnet - Jeremy Ellis (jeremy@ellisnet.com)
+   Copyright 2024 Ellisnet - Jeremy Ellis (jeremy@ellisnet.com)
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
@@ -14,7 +14,7 @@
    limitations under the License.
 */
 
-//FILE DATE/REVISION: 07/23/2023
+//FILE DATE/REVISION: 02/17/2024
 
 // ReSharper disable RedundantCast
 // ReSharper disable RedundantAssignment
@@ -30,6 +30,8 @@
 // ReSharper disable UnusedMember.Global
 // ReSharper disable UnusedMemberInSuper.Global
 // ReSharper disable UnusedParameter.Local
+// ReSharper disable ConvertToPrimaryConstructor
+// ReSharper disable LocalizableElement
 
 #pragma warning disable IDE0079
 
@@ -54,7 +56,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
-#if WIN_UI //Needs to be manually defined on Win UI projects
+#if (WIN_UI || UNO) //Needs to be manually defined on Win UI (WIN_UI) or Uno (UNO) projects
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -80,11 +82,14 @@ using Microsoft.Extensions.Hosting;
 #if USING_WEB_HOST
 //Requires NuGet package: Microsoft.AspNetCore.Owin
 using Microsoft.AspNetCore.Hosting;
-using System.Threading;
 #endif
 
 #if SIMPLE_MESSAGING
 //Nothing special needed
+#endif
+
+#if (USING_WEB_HOST || SIMPLE_MESSAGING)
+using System.Threading;
 #endif
 
 #if SIMPLE_HTTP_CLIENT
@@ -99,7 +104,7 @@ using IO = System.IO;
 using IHttpClientFactory = System.Net.Http.IHttpClientFactory; //Added this line so the problem of missing NuGet package shows up at the top
 #endif
 
-//If this code file is being used in a console app, we probably just want to disable all of the UI portions
+//If this code file is being used in a console app, we probably just want to disable all the UI portions
 #if !DISABLE_UI
 
 // ReSharper disable InconsistentNaming
@@ -127,7 +132,6 @@ public class SimpleDialog : IDisposable
     private bool _isDisposed;
 
     private string _message = "";
-
     public string Message
     {
         get => _message;
@@ -135,7 +139,6 @@ public class SimpleDialog : IDisposable
     }
 
     private string _title;
-
     public string Title
     {
         get => _title;
@@ -144,25 +147,28 @@ public class SimpleDialog : IDisposable
 
     public SimpleDialogButtons Buttons { get; set; }
 
-#if WIN_UI
+#if (WIN_UI || UNO)
     private SimpleDialog(
-        XamlRoot xamlRoot,
+        Func<XamlRoot> xamlRootGetter,
+        DispatcherQueue dispatcher,
         string message, 
         string title, 
         SimpleDialogButtons buttons)
     {
-        _xamlRoot = xamlRoot ?? throw new ArgumentNullException(nameof(xamlRoot));
+        _xamlRootGetter = xamlRootGetter ?? throw new ArgumentNullException(nameof(xamlRootGetter));
+        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         Message = message;
         Title = title;
         Buttons = buttons;
     }
 
     public static SimpleDialog Create(
-        XamlRoot xamlRoot,
+        Func<XamlRoot> xamlRootGetter,
+        DispatcherQueue dispatcher,
         string message,
         string title = null,
         SimpleDialogButtons buttons = SimpleDialogButtons.OK) => 
-        new(xamlRoot, message, title, buttons);
+        new(xamlRootGetter, dispatcher, message, title, buttons);
 
     private string BreakOnMaxLineLength(string text, int maxLineLength)
     {
@@ -198,28 +204,34 @@ public class SimpleDialog : IDisposable
         return result;
     }
 
-    private XamlRoot _xamlRoot;
+    // ReSharper disable InconsistentNaming
+    //VERY IMPORTANT: With Uno, anything that touches the XamlRoot needs to be running on the main thread.
+    protected Func<XamlRoot> _xamlRootGetter;
+    protected DispatcherQueue _dispatcher;
+    // ReSharper restore InconsistentNaming
 #elif MAUI
     private SimpleDialog(
-        Page xamlRoot,
+        Func<Page> xamlRootGetter,
         string message,
         string title,
         SimpleDialogButtons buttons)
     {
-        _xamlRoot = xamlRoot ?? throw new ArgumentNullException(nameof(xamlRoot));
+        _xamlRootGetter = xamlRootGetter ?? throw new ArgumentNullException(nameof(xamlRootGetter));
         Message = message;
         Title = title;
         Buttons = buttons;
     }
 
     public static SimpleDialog Create(
-        Page xamlRoot,
+        Func<Page> xamlRootGetter,
         string message,
         string title = null,
         SimpleDialogButtons buttons = SimpleDialogButtons.OK) =>
-        new(xamlRoot, message, title, buttons);
+        new(xamlRootGetter, message, title, buttons);
 
-    private Page _xamlRoot;
+    // ReSharper disable InconsistentNaming
+    protected Func<Page> _xamlRootGetter;
+    // ReSharper restore InconsistentNaming
 #else
     private SimpleDialog(
         string message,
@@ -245,7 +257,7 @@ public class SimpleDialog : IDisposable
 
         var result = SimpleDialogResult.None;
 
-#if (WIN_UI || MAUI)
+#if (WIN_UI || UNO || MAUI)
         string firstButton;
         SimpleDialogResult firstButtonResult;
         string secondButton = null;
@@ -274,41 +286,55 @@ public class SimpleDialog : IDisposable
         }
 #endif
 
-#if WIN_UI
-        var dialog = new ContentDialog {
-            Content = new TextBlock { Text = BreakOnMaxLineLength(_message, 74) },
-            PrimaryButtonText = firstButton,
-            IsPrimaryButtonEnabled = true,
-            IsSecondaryButtonEnabled = (secondButton != null),
-            XamlRoot = _xamlRoot
-        };
-        if (secondButton != null) {
-            dialog.SecondaryButtonText = secondButton;
-        }
-        if (_title != null) {
-            dialog.Title = _title;
-        }
+#if (WIN_UI || UNO)
+        result = await _dispatcher.InvokeOnMainThreadAsync(async () =>
+        {
+            var dlgResult = SimpleDialogResult.None;
 
-        var resultTask = dialog.ShowAsync(ContentDialogPlacement.Popup).AsTask();
-        ContentDialogResult dialogResult = await resultTask;
-        if (dialogResult == ContentDialogResult.Primary) {
-            result = firstButtonResult;
-        }
-        else if (dialogResult == ContentDialogResult.Secondary) {
-            result = secondButtonResult;
-        }
+            var dialog = new ContentDialog
+            {
+                Content = new TextBlock { Text = BreakOnMaxLineLength(_message, 74) },
+                PrimaryButtonText = firstButton,
+                IsPrimaryButtonEnabled = true,
+                IsSecondaryButtonEnabled = (secondButton != null),
+                XamlRoot = _xamlRootGetter.Invoke()
+            };
+            if (secondButton != null)
+            {
+                dialog.SecondaryButtonText = secondButton;
+            }
+            if (_title != null)
+            {
+                dialog.Title = _title;
+            }
 
+            var dialogResult = await dialog.ShowAsync(ContentDialogPlacement.Popup);
+            if (dialogResult == ContentDialogResult.Primary)
+            {
+                dlgResult = firstButtonResult;
+            }
+            else if (dialogResult == ContentDialogResult.Secondary)
+            {
+                dlgResult = secondButtonResult;
+            }
+
+            return dlgResult;
+        });
 #elif MAUI
         if (secondButton == null)
         {
-            await _xamlRoot.DisplayAlert((_title ?? ""), _message, firstButton);
+            await MainThreadHelper.SafeInvokeOnMainThreadAsync(async () =>
+            {
+                await _xamlRootGetter.Invoke().DisplayAlert((_title ?? ""), _message, firstButton);
+            });
             result = firstButtonResult;
         }
         else
         {
-            result = (await _xamlRoot.DisplayAlert((_title ?? ""), _message, firstButton, secondButton))
-                ? firstButtonResult
-                : secondButtonResult;
+            result = await MainThreadHelper.SafeInvokeOnMainThreadAsync(async () => 
+                (await _xamlRootGetter.Invoke().DisplayAlert((_title ?? ""), _message, firstButton, secondButton)) 
+                    ? firstButtonResult 
+                    : secondButtonResult);
         }
 #else
 
@@ -365,15 +391,55 @@ public class SimpleDialog : IDisposable
     public void Dispose()
     {
         _isDisposed = true;
-#if (WIN_UI || MAUI)
-        _xamlRoot = null;
+#if (WIN_UI || UNO)
+        _xamlRootGetter = null;
+        _dispatcher = null;
+#elif (MAUI)
+        _xamlRootGetter = null;
 #endif
     }
 
     #endregion
 }
 
-#if WIN_UI
+#if (WIN_UI || UNO)
+internal static class DispatcherHelper
+{
+    internal static void InvokeOnMainThread(this DispatcherQueue dispatcher, Action functionToExecute)
+    {
+        if (dispatcher == null) { throw new ArgumentNullException(nameof(dispatcher));}
+
+        if (functionToExecute != null)
+        {
+            dispatcher.TryEnqueue(functionToExecute.Invoke);
+        }
+    }
+
+    internal static Task<T> InvokeOnMainThreadAsync<T>(this DispatcherQueue dispatcher, Func<Task<T>> functionToExecute)
+    {
+        if (dispatcher == null) { throw new ArgumentNullException(nameof(dispatcher)); }
+        if (functionToExecute == null) { throw new ArgumentNullException(nameof(functionToExecute)); }
+
+        var completionSource = new TaskCompletionSource<T>();
+
+        // ReSharper disable once AsyncVoidLambda
+        dispatcher.TryEnqueue(async () =>
+        {
+            try
+            {
+                T result = await functionToExecute.Invoke();
+                completionSource.SetResult(result);
+            }
+            catch (Exception ex)
+            {
+                completionSource.SetException(ex);
+            }
+        });
+
+        return completionSource.Task;
+    }
+}
+
 public interface IXamlRootGetter
 {
     public void SetXamlRootGetter(Func<XamlRoot> getter);
@@ -381,13 +447,65 @@ public interface IXamlRootGetter
 #endif
 
 #if MAUI
+internal static class MainThreadHelper
+{
+    internal static void SafeInvokeOnMainThread(Action functionToExecute)
+    {
+        if (functionToExecute != null)
+        {
+            if (MainThread.IsMainThread)
+            {
+                functionToExecute.Invoke();
+            }
+            else
+            {
+                MainThread.BeginInvokeOnMainThread(functionToExecute.Invoke);
+            }
+        }
+    }
+
+    internal static async Task SafeInvokeOnMainThreadAsync(Func<Task> functionToExecute)
+    {
+        if (functionToExecute != null)
+        {
+            if (MainThread.IsMainThread)
+            {
+                await functionToExecute.Invoke();
+            }
+            else
+            {
+                await MainThread.InvokeOnMainThreadAsync(functionToExecute);
+            }
+        }
+    }
+
+    internal static async Task<T> SafeInvokeOnMainThreadAsync<T>(Func<Task<T>> functionToExecute)
+    {
+        T result = default;
+
+        if (functionToExecute != null)
+        {
+            if (MainThread.IsMainThread)
+            {
+                result = await functionToExecute.Invoke();
+            }
+            else
+            {
+                result = await MainThread.InvokeOnMainThreadAsync(functionToExecute);
+            }
+        }
+
+        return result;
+    }
+}
+
 public interface IXamlRootGetter
 {
     public void SetXamlRootGetter(Func<Page> getter);
 }
 #endif
 
-#if (WIN_UI || MAUI)
+#if (WIN_UI || UNO || MAUI)
 public abstract class SimpleViewModel : IXamlRootGetter, INotifyPropertyChanged, IDisposable
 #else
 public abstract class SimpleViewModel : INotifyPropertyChanged, IDisposable
@@ -396,7 +514,7 @@ public abstract class SimpleViewModel : INotifyPropertyChanged, IDisposable
     // ReSharper disable once InconsistentNaming
     private static bool? _isInDesignMode;
 
-#if (WIN_UI || MAUI)
+#if (WIN_UI || UNO || MAUI)
     //Don't currently know how to check and see if the view-model instance is in "design mode" -
     //  for WinUI and .NET MAUI.
     protected bool IsDesignMode(bool defaultValueIfNotSet) =>
@@ -421,20 +539,28 @@ public abstract class SimpleViewModel : INotifyPropertyChanged, IDisposable
 
     public static void SetIsDesignMode(bool isDesignMode) => _isInDesignMode = isDesignMode;
 
-#if WIN_UI
+#if (WIN_UI || UNO)
     private DispatcherQueue _dispatcher = DispatcherQueue.GetForCurrentThread();
 
     private Func<XamlRoot> _xamlRootGetter;
 
     protected XamlRoot GetXamlRoot()
     {
-        if (_xamlRootGetter == null)
+        try
         {
-            throw new InvalidOperationException(
-                $"Unable to perform the requested UI operation before {nameof(SetXamlRootGetter)}() has been called.");
-        }
+            if (_xamlRootGetter == null)
+            {
+                throw new InvalidOperationException(
+                    $"Unable to perform the requested UI operation before {nameof(SetXamlRootGetter)}() has been called.");
+            }
 
-        return _xamlRootGetter.Invoke();
+            return _xamlRootGetter.Invoke();
+        }
+        catch (InvalidOperationException) { throw; }
+        catch (Exception e)
+        {
+            throw new InvalidOperationException("Getting XamlRoot on WinUI and Uno can fail if not executed on the main thread.", e);
+        }
     }
 
     //Example of how this SetXamlRootGetter() method should be used in the constructor of a
@@ -475,7 +601,7 @@ public abstract class SimpleViewModel : INotifyPropertyChanged, IDisposable
     //Example of how this SetXamlRootGetter() method should be called from the code-behind file
     //  of a .NET MAUI XAML Page (e.g. ContentPage):
 
-    //1) The Page should have a the BindingContext set to an instance of the viewmodel, like this:
+    //1) The Page should have the BindingContext set to an instance of the viewmodel, like this:
     //  (with the 'vm' namespace set as: xmlns:vm="clr-namespace:MyApplication.ViewModels" )
     //  <ContentPage.BindingContext>
     //    <vm:MainViewModel />
@@ -631,12 +757,18 @@ public abstract class SimpleViewModel : INotifyPropertyChanged, IDisposable
 
     #region | Dialog helpers |
 
-#if (WIN_UI || MAUI)
+#if (WIN_UI || UNO)
     protected virtual SimpleDialog CreateDialog(
         string message,
         string title = null,
         SimpleDialogButtons buttons = SimpleDialogButtons.OK) =>
-        SimpleDialog.Create(GetXamlRoot(), message, title, buttons);
+        SimpleDialog.Create(_xamlRootGetter, _dispatcher, message, title, buttons);
+#elif (MAUI)
+    protected virtual SimpleDialog CreateDialog(
+        string message,
+        string title = null,
+        SimpleDialogButtons buttons = SimpleDialogButtons.OK) =>
+        SimpleDialog.Create(_xamlRootGetter, message, title, buttons);
 #else
     protected virtual SimpleDialog CreateDialog(
         string message,
@@ -706,37 +838,17 @@ public abstract class SimpleViewModel : INotifyPropertyChanged, IDisposable
 
     #endregion
 
-#if WIN_UI
+#if (WIN_UI || UNO)
 
     protected Visibility GetVisibility(bool isVisible) {
         return isVisible ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    protected virtual void InvokeOnMainThread(Action functionToExecute) {
-        if (functionToExecute != null) {
-            _dispatcher.TryEnqueue(functionToExecute.Invoke);
-        }
-    }
+    protected virtual void InvokeOnMainThread(Action functionToExecute) =>
+        _dispatcher.InvokeOnMainThread(functionToExecute);
 
-    protected virtual Task<T> InvokeOnMainThreadAsync<T>(Func<Task<T>> functionToExecute) {
-        var completionSource = new TaskCompletionSource<T>();
-
-        // ReSharper disable once AsyncVoidLambda
-        _dispatcher.TryEnqueue(async () =>
-        {
-            try
-            {
-                T result = await functionToExecute.Invoke();
-                completionSource.SetResult(result);
-            }
-            catch (Exception ex)
-            {
-                completionSource.SetException(ex);
-            }
-        });
-
-        return completionSource.Task;
-    }
+    protected virtual Task<T> InvokeOnMainThreadAsync<T>(Func<Task<T>> functionToExecute) =>
+        _dispatcher.InvokeOnMainThreadAsync(functionToExecute);
 
 #elif MAUI
 
@@ -990,11 +1102,11 @@ public abstract class SimpleViewModel : INotifyPropertyChanged, IDisposable
         }
         PropertyChanged = null;
 
-#if WIN_UI
+#if (WIN_UI || UNO)
         _dispatcher = null;
 #endif
 
-#if (WIN_UI || MAUI)
+#if (WIN_UI || UNO || MAUI)
         _xamlRootGetter = null;
 #endif
     }
@@ -1027,11 +1139,11 @@ public class AffectsCommandsAttribute : Attribute
 }
 
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
-public class AffectsAllCommandsAttribute : Attribute { }
+public class AffectsAllCommandsAttribute : Attribute;
 
 public class SimpleCommand : ICommand, IDisposable
 {
-#if WIN_UI
+#if (WIN_UI || UNO)
     private DispatcherQueue _dispatcher = DispatcherQueue.GetForCurrentThread();
 #endif
 
@@ -1225,7 +1337,7 @@ public class SimpleCommand : ICommand, IDisposable
                 case ExecuteStyle.SyncWithParam:
                     if (executeOnMain)
                     {
-#if WIN_UI
+#if (WIN_UI || UNO)
                         _dispatcher.TryEnqueue(() => { _executeWithParamSync.Invoke(parameter); });
 #elif MAUI
                         await MainThread.InvokeOnMainThreadAsync(() => { _executeWithParamSync.Invoke(parameter); });
@@ -1242,7 +1354,7 @@ public class SimpleCommand : ICommand, IDisposable
                 case ExecuteStyle.SyncNoParam:
                     if (executeOnMain)
                     {
-#if WIN_UI
+#if (WIN_UI || UNO)
                         _dispatcher.TryEnqueue(_executeNoParamSync.Invoke);
 #elif MAUI
                         await MainThread.InvokeOnMainThreadAsync(() => { _executeNoParamSync.Invoke(); });
@@ -1259,7 +1371,7 @@ public class SimpleCommand : ICommand, IDisposable
                 case ExecuteStyle.AsyncWithParam:
                     if (executeOnMain)
                     {
-#if WIN_UI
+#if (WIN_UI || UNO)
                         var tsc = new TaskCompletionSource();
                         var queued = _dispatcher.TryEnqueue(() => { WaitForExecute(tsc, _executeWithParamAsync, parameter); });
                         if (queued)
@@ -1281,7 +1393,7 @@ public class SimpleCommand : ICommand, IDisposable
                 case ExecuteStyle.AsyncNoParam:
                     if (executeOnMain)
                     {
-#if WIN_UI
+#if (WIN_UI || UNO)
                         var tsc = new TaskCompletionSource();
                         var queued = _dispatcher.TryEnqueue(() => { WaitForExecute(tsc, _executeNoParamAsync); });
                         if (queued)
@@ -1330,7 +1442,7 @@ public class SimpleCommand : ICommand, IDisposable
         _executeNoParamSync = null;
         _executeNoParamAsync = null;
 
-#if WIN_UI
+#if (WIN_UI || UNO)
         _dispatcher = null;
 #endif
     }
@@ -1535,9 +1647,9 @@ public static class SimpleEnumHelper
         {
             var infoType = typeof(TInfo);
 
-            if (CheckDictionaries(infoType: infoType) && InfoDictionary.ContainsKey(infoType))
+            if (CheckDictionaries(infoType: infoType) 
+                && InfoDictionary.TryGetValue(infoType, out var dictionary))
             {
-                var dictionary = InfoDictionary[infoType];
                 if (dictionary.Any(a => a.Key.Equals(memberName.Trim(),
                         StringComparison.InvariantCultureIgnoreCase)
                     && a.Value != null))
@@ -1564,9 +1676,9 @@ public static class SimpleEnumHelper
         {
             var infoType = typeof(TInfo);
 
-            if (CheckDictionaries(infoType: infoType) && InfoDictionary.ContainsKey(infoType))
+            if (CheckDictionaries(infoType: infoType) 
+                && InfoDictionary.TryGetValue(infoType, out var dictionary))
             {
-                var dictionary = InfoDictionary[infoType];
                 if (dictionary.Any(a => a.Key.Equals(member.ToString(),
                                             StringComparison.InvariantCultureIgnoreCase)
                                         && a.Value != null))
@@ -1596,10 +1708,8 @@ public static class SimpleEnumHelper
         var infoType = typeof(TInfo);
 
         if (CheckDictionaries(enumType: enumType, infoType: typeof(TInfo))
-            && EnumDictionary.ContainsKey(enumType))
+            && EnumDictionary.TryGetValue(enumType, out var dictionary))
         {
-            var dictionary = EnumDictionary[enumType];
-
             foreach (var member in Enum.GetValues(enumType).Cast<TEnum>())
             {
                 if (dictionary.Any(a => a.Key == member.ToString()
@@ -1833,7 +1943,7 @@ public class SimpleMessaging : ISimpleMessaging
                                || (DelegateWeakReference?.IsAlive ?? false);
     }
 
-    private class Subscription : IDisposable //: Tuple<WeakReference, MaybeWeakReference, MethodInfo, Func<object, object, Task>, Filter>, IDisposable
+    private class Subscription : IDisposable
     {
         public Subscription(
             object subscriber,
@@ -1848,7 +1958,6 @@ public class SimpleMessaging : ISimpleMessaging
             AsyncMethod = asyncMethod;
             Filter = filter;
         }
-        //			: base(new WeakReference(subscriber), new MaybeWeakReference(subscriber, delegateSource), syncMethod, asyncMethod, filter) { }
 
         public WeakReference Subscriber { get; }
         private MaybeWeakReference DelegateSource { get; }
@@ -1900,7 +2009,10 @@ public class SimpleMessaging : ISimpleMessaging
             {
                 if (SyncMethod.IsStatic)
                 {
-                    SyncMethod.Invoke(null, SyncMethod.GetParameters().Length == 1 ? new[] { sender ?? args } : new[] { sender, args });
+                    SyncMethod.Invoke(null, 
+                        (SyncMethod.GetParameters().Length == 1)
+                            ? [sender ?? args]
+                            : [sender, args]);
                     return;
                 }
 
@@ -1908,7 +2020,10 @@ public class SimpleMessaging : ISimpleMessaging
 
                 if (target == null) { return; }
 
-                SyncMethod.Invoke(target, SyncMethod.GetParameters().Length == 1 ? new[] { sender ?? args } : new[] { sender, args });
+                SyncMethod.Invoke(target, 
+                    (SyncMethod.GetParameters().Length == 1)
+                        ? [sender ?? args]
+                        : [sender, args]);
             }
         }
 
@@ -2005,7 +2120,7 @@ public class SimpleMessaging : ISimpleMessaging
             }
             else
             {
-                _subscriptions.Add(key, new List<Subscription> { value });
+                _subscriptions.Add(key, [value]);
             }
         }
     }
