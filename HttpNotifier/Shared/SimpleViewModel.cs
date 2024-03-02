@@ -1,6 +1,3 @@
-//File copied and adapted from here:
-//  https://github.com/ellisnet/ArduinoBle/blob/feature/TryingWindows/Source/BluetoothLevel.Net/BluetoothLevel.Net/ViewModels/SimpleViewModel.cs
-
 /*
    Copyright 2024 Ellisnet - Jeremy Ellis (jeremy@ellisnet.com)
    Licensed under the Apache License, Version 2.0 (the "License");
